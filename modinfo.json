@@ -1,0 +1,15 @@
+{
+    "type": "code",
+    "name": "NutritionPlanner",
+    "modid": "nutritionplanner",
+    "version": "0.1.0",
+    "description": "Per-player HUD showing the 4 nutrition bars with progressive alerts and AI-powered meal suggestions.",
+    "authors": ["Los Albatros"],
+    "side": "Universal",
+    "requiredOnClient": true,
+    "requiredOnServer": true,
+    "dependencies": {
+        "game": "1.19.0"
+    },
+    "optionalDependencies": ["chataimod", "configlib"]
+}
