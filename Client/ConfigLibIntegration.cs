@@ -46,6 +46,12 @@ public static class ConfigLibIntegration
     private static void Draw(string id, bool save, NutritionHudConfig config, ICoreClientAPI api)
     {
         ImGui.TextDisabled("NutritionPlanner settings");
+
+        var hk = api.Input.HotKeys.TryGetValue("nutritionplanner_toggle", out var hotkey) ? hotkey : null;
+        string keyLabel = hk?.CurrentMapping?.ToString() ?? "N";
+        ImGui.TextDisabled($"Toggle HUD key: {keyLabel}   (rebind in Options → Controls)");
+
+        ImGui.Spacing();
         ImGui.SetNextItemWidth(200f);
         ImGui.SliderFloat($"Warning threshold % (pulse)##{id}t1", ref _threshold1, 5f, 80f);
         ImGui.SetNextItemWidth(200f);

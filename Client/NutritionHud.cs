@@ -47,7 +47,7 @@ public class NutritionHud : HudElement
     public new void Toggle()
     {
         _config.HudVisible = !_config.HudVisible;
-        if (_config.HudVisible) { Recompose(); TryOpen(); }
+        if (_config.HudVisible) { _pulseToggle = false; Recompose(); TryOpen(); }
         else                      TryClose();
         _config.Save(capi);
     }
@@ -98,7 +98,7 @@ public class NutritionHud : HudElement
         CheckThreshold2("Protein", _protein);
         CheckThreshold2("Dairy",   _dairy);
 
-        if (!IsOpened()) { Recompose(); TryOpen(); }
+        if (!IsOpened()) { _pulseToggle = false; Recompose(); TryOpen(); }
         else UpdateBars();
     }
 
@@ -193,7 +193,7 @@ public class NutritionHud : HudElement
 
         var suggText   = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
         var suggBounds = ElementBounds.Fixed(pad, y, innerW, rowH * 2);
-        SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(11f), suggBounds, "suggestion");
+        SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(13f), suggBounds, "suggestion");
         y += rowH * 2;
 
         if (_showHistory)

@@ -91,9 +91,25 @@ public class NutritionPlannerClientSystem : ModSystem
 
     private void OnSuggestRequested()
     {
-        var inv  = BuildInventoryFoods();
-        var text = NutritionFallback.Suggest(_prev, inv) ?? "All nutrition bars look balanced.";
-        _hud?.SetSuggestion(text);
+        var inv = BuildInventoryFoods();
+        var raw = NutritionFallback.Suggest(_prev, inv);
+        if (raw == null) { _hud?.SetSuggestion("All nutrition bars look balanced."); return; }
+
+        // raw: "game:pear-ripe (+Veg)" — translate item code, strip domain
+        var sep   = raw.IndexOf(" (+", StringComparison.Ordinal);
+        var code  = sep >= 0 ? raw[..sep] : raw;
+        var rest  = sep >= 0 ? raw[sep..] : "";
+        _hud?.SetSuggestion(TranslateName(code) + rest);
+    }
+
+    private string TranslateName(string itemCode)
+    {
+        var loc   = new AssetLocation(itemCode);
+        var item  = _capi!.World.GetItem(loc);
+        if (item  != null) return item.GetHeldItemName(new ItemStack(item));
+        var block = _capi!.World.GetBlock(loc);
+        if (block != null) return block.GetHeldItemName(new ItemStack(block, 1));
+        return loc.Path.Replace("-", " ");
     }
 
     private List<InventoryFood> BuildInventoryFoods()
