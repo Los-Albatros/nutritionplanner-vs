@@ -1,5 +1,7 @@
 # NutritionPlanner — Vintage Story Mod
 
+![NutritionPlanner](logo.png)
+
 A lightweight **client-only** HUD that tracks your four nutrition bars in real time,
 warns you before they drop too low, and suggests what to eat from your inventory.
 No server install required — works on any vanilla or modded server.
@@ -33,16 +35,7 @@ No server install required — works on any vanilla or modded server.
 
 ## HUD
 
-```
-┌─ Nutrition ──────────────────── ✕ ─┐
-│ Grain   ███████████████████  72%   │
-│ Veg     ████████░░░░░░░░░░░  38%   │
-│ Protein ██░░░░░░░░░░░░░░░░░  14%   │  ← flashes red
-│ Dairy   █████████████░░░░░░  55%   │
-│                         [Suggest]  │
-│ → Cooked Chicken (+Protein)        │
-└────────────────────────────────────┘
-```
+![HUD preview](ex1.png)
 
 ## Controls
 
