@@ -9,7 +9,7 @@ public class NutritionPlannerClientSystem : ModSystem
     private NutritionHud?       _hud;
     private NutritionHudConfig? _config;
     private FoodHistoryStore    _history = new();
-    private NutrientValues      _prev    = new(0, 0, 0, 0, 1500f);
+    private NutrientValues      _prev    = new(0, 0, 0, 0, 0, 1500f);
 
     private const string HistoryFile = "nutritionplanner_history.json";
 
@@ -61,6 +61,7 @@ public class NutritionPlannerClientSystem : ModSystem
             hunger.GetFloat("vegetableLevel"),
             hunger.GetFloat("proteinLevel"),
             hunger.GetFloat("dairyLevel"),
+            hunger.GetFloat("fruitLevel"),
             max);
 
         if (HasPositiveDelta(_prev, current))
@@ -73,7 +74,8 @@ public class NutritionPlannerClientSystem : ModSystem
                 Math.Max(0f, current.Grain   - _prev.Grain),
                 Math.Max(0f, current.Veg     - _prev.Veg),
                 Math.Max(0f, current.Protein - _prev.Protein),
-                Math.Max(0f, current.Dairy   - _prev.Dairy));
+                Math.Max(0f, current.Dairy   - _prev.Dairy),
+                Math.Max(0f, current.Fruit   - _prev.Fruit));
             _history.Add(entry);
             SaveHistory();
             _hud?.SetHistory(_history.Entries);
@@ -87,7 +89,8 @@ public class NutritionPlannerClientSystem : ModSystem
         curr.Grain   > prev.Grain   + 0.01f ||
         curr.Veg     > prev.Veg     + 0.01f ||
         curr.Protein > prev.Protein + 0.01f ||
-        curr.Dairy   > prev.Dairy   + 0.01f;
+        curr.Dairy   > prev.Dairy   + 0.01f ||
+        curr.Fruit   > prev.Fruit   + 0.01f;
 
     private void OnSuggestRequested()
     {
@@ -129,6 +132,7 @@ public class NutritionPlannerClientSystem : ModSystem
                     EnumFoodCategory.Vegetable => "Veg",
                     EnumFoodCategory.Protein   => "Protein",
                     EnumFoodCategory.Dairy     => "Dairy",
+                    EnumFoodCategory.Fruit     => "Fruit",
                     _                          => ""
                 };
                 if (!string.IsNullOrEmpty(cat))

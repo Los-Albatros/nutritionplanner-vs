@@ -1,15 +1,16 @@
 namespace nutritionPlannerVintageStoryMod.Client;
 
-public record NutrientValues(float Grain, float Veg, float Protein, float Dairy, float Max)
+public record NutrientValues(float Grain, float Veg, float Protein, float Dairy, float Fruit, float Max)
 {
     private float Pct(float v) => Max > 0 ? v / Max * 100f : 0f;
     public float GrainPct   => Pct(Grain);
     public float VegPct     => Pct(Veg);
     public float ProteinPct => Pct(Protein);
     public float DairyPct   => Pct(Dairy);
+    public float FruitPct   => Pct(Fruit);
 
     public IEnumerable<string> OrderedByNeed() =>
-        new[] { ("Grain", GrainPct), ("Veg", VegPct), ("Protein", ProteinPct), ("Dairy", DairyPct) }
+        new[] { ("Grain", GrainPct), ("Veg", VegPct), ("Protein", ProteinPct), ("Dairy", DairyPct), ("Fruit", FruitPct) }
         .OrderBy(x => x.Item2)
         .Select(x => x.Item1);
 }

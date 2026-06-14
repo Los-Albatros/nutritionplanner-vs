@@ -8,7 +8,8 @@ public record FoodEntry(
     float  DeltaGrain,
     float  DeltaVeg,
     float  DeltaProtein,
-    float  DeltaDairy);
+    float  DeltaDairy,
+    float  DeltaFruit);
 
 public class FoodHistoryStore
 {

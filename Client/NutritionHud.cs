@@ -8,13 +8,14 @@ public class NutritionHud : HudElement
     private static readonly double[] ColorVeg     = [0.290, 0.580, 0.200, 0.9];  // forest green
     private static readonly double[] ColorProtein = [0.737, 0.200, 0.161, 0.9];  // brick red
     private static readonly double[] ColorDairy   = [0.420, 0.620, 0.820, 0.9];  // slate blue
+    private static readonly double[] ColorFruit   = [0.900, 0.480, 0.100, 0.9];  // orange
     private static readonly double[] ColorAlert   = [0.860, 0.100, 0.100, 0.9];
 
     private readonly NutritionHudConfig _config;
     private readonly Action             _onSuggestRequest;
 
-    private float _grain, _veg, _protein, _dairy;
-    private bool  _pulseGrain, _pulseVeg, _pulseProtein, _pulseDairy;
+    private float _grain, _veg, _protein, _dairy, _fruit;
+    private bool  _pulseGrain, _pulseVeg, _pulseProtein, _pulseDairy, _pulseFruit;
     private bool  _pulseToggle;
 
     private readonly Dictionary<string, (bool belowT2, double lastMessageTime)> _alertState = new()
@@ -23,6 +24,7 @@ public class NutritionHud : HudElement
         ["Veg"]     = (false, -9999),
         ["Protein"] = (false, -9999),
         ["Dairy"]   = (false, -9999),
+        ["Fruit"]   = (false, -9999),
     };
 
     private string? _suggestion;
@@ -87,16 +89,19 @@ public class NutritionHud : HudElement
         _veg     = hunger.GetFloat("vegetableLevel") / max * 100f;
         _protein = hunger.GetFloat("proteinLevel")   / max * 100f;
         _dairy   = hunger.GetFloat("dairyLevel")     / max * 100f;
+        _fruit   = hunger.GetFloat("fruitLevel")     / max * 100f;
 
         _pulseGrain   = _grain   < _config.Threshold1;
         _pulseVeg     = _veg     < _config.Threshold1;
         _pulseProtein = _protein < _config.Threshold1;
         _pulseDairy   = _dairy   < _config.Threshold1;
+        _pulseFruit   = _fruit   < _config.Threshold1;
 
         CheckThreshold2("Grain",   _grain);
         CheckThreshold2("Veg",     _veg);
         CheckThreshold2("Protein", _protein);
         CheckThreshold2("Dairy",   _dairy);
+        CheckThreshold2("Fruit",   _fruit);
 
         if (!IsOpened()) { _pulseToggle = false; Recompose(); TryOpen(); }
         else UpdateBars();
@@ -133,16 +138,19 @@ public class NutritionHud : HudElement
             var barVeg     = composer.GetStatbar("bar-veg");
             var barProtein = composer.GetStatbar("bar-protein");
             var barDairy   = composer.GetStatbar("bar-dairy");
+            var barFruit   = composer.GetStatbar("bar-fruit");
 
             barGrain  ?.SetValue(_grain);
             barVeg    ?.SetValue(_veg);
             barProtein?.SetValue(_protein);
             barDairy  ?.SetValue(_dairy);
+            barFruit  ?.SetValue(_fruit);
 
             composer.GetDynamicText("pct-grain")  ?.SetNewText($"{_grain:F0}%");
             composer.GetDynamicText("pct-veg")    ?.SetNewText($"{_veg:F0}%");
             composer.GetDynamicText("pct-protein")?.SetNewText($"{_protein:F0}%");
             composer.GetDynamicText("pct-dairy")  ?.SetNewText($"{_dairy:F0}%");
+            composer.GetDynamicText("pct-fruit")  ?.SetNewText($"{_fruit:F0}%");
 
             if (_suggestion != null && _suggestionAge < SuggestionFadeSeconds)
                 composer.GetDynamicText("suggestion")?.SetNewText($"→ {_suggestion}");
@@ -154,6 +162,8 @@ public class NutritionHud : HudElement
 
     private void Recompose()
     {
+        _pulseToggle = false;  // always show normal colors on recompose — pulse resumes on next tick
+
         double pad    = GuiStyle.ElementToDialogPadding;
         double titleH = GuiStyle.TitleBarHeight;
         double rowH   = 26;
@@ -162,7 +172,7 @@ public class NutritionHud : HudElement
         double pctW   = 40;
         double innerW = labelW + 4 + barW + 4 + pctW;
         double totalH = titleH + pad
-            + 4 * rowH
+            + 5 * rowH
             + 8                // spacer before button/suggestion
             + rowH             // suggest button row
             + rowH * 2         // suggestion text (two lines)
@@ -185,6 +195,7 @@ public class NutritionHud : HudElement
         AddBarRow(ref y, "Veg",     _veg,     "bar-veg",     "pct-veg",     _pulseVeg     && _pulseToggle ? ColorAlert : ColorVeg);
         AddBarRow(ref y, "Protein", _protein, "bar-protein", "pct-protein", _pulseProtein && _pulseToggle ? ColorAlert : ColorProtein);
         AddBarRow(ref y, "Dairy",   _dairy,   "bar-dairy",   "pct-dairy",   _pulseDairy   && _pulseToggle ? ColorAlert : ColorDairy);
+        AddBarRow(ref y, "Fruit",   _fruit,   "bar-fruit",   "pct-fruit",   _pulseFruit   && _pulseToggle ? ColorAlert : ColorFruit);
 
         y += 8;
         var btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
@@ -205,7 +216,7 @@ public class NutritionHud : HudElement
             {
                 var eb = ElementBounds.Fixed(pad, y, innerW, rowH);
                 SingleComposer.AddStaticText(
-                    $"  {ShortCode(e.ItemCode)}: G+{e.DeltaGrain:F0} V+{e.DeltaVeg:F0} P+{e.DeltaProtein:F0} D+{e.DeltaDairy:F0}",
+                    $"  {ShortCode(e.ItemCode)}: G+{e.DeltaGrain:F0} V+{e.DeltaVeg:F0} P+{e.DeltaProtein:F0} D+{e.DeltaDairy:F0} F+{e.DeltaFruit:F0}",
                     CairoFont.WhiteSmallText().WithFontSize(10f), eb);
                 y += rowH;
             }
