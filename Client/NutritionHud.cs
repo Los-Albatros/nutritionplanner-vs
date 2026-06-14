@@ -1,19 +1,17 @@
-using nutritionPlannerVintageStoryMod.Network;
 using Vintagestory.API.Client;
-using Vintagestory.GameContent;
 
 namespace nutritionPlannerVintageStoryMod.Client;
 
 public class NutritionHud : HudElement
 {
-    private static readonly double[] ColorGrain   = [0.831, 0.627, 0.090, 0.9];
-    private static readonly double[] ColorVeg     = [0.298, 0.686, 0.314, 0.9];
-    private static readonly double[] ColorProtein = [0.937, 0.325, 0.314, 0.9];
-    private static readonly double[] ColorDairy   = [0.392, 0.710, 0.965, 0.9];
-    private static readonly double[] ColorAlert   = [0.900, 0.100, 0.100, 0.9];
+    private static readonly double[] ColorGrain   = [0.765, 0.612, 0.180, 0.9];  // golden wheat
+    private static readonly double[] ColorVeg     = [0.290, 0.580, 0.200, 0.9];  // forest green
+    private static readonly double[] ColorProtein = [0.737, 0.200, 0.161, 0.9];  // brick red
+    private static readonly double[] ColorDairy   = [0.420, 0.620, 0.820, 0.9];  // slate blue
+    private static readonly double[] ColorAlert   = [0.860, 0.100, 0.100, 0.9];
 
-    private readonly NutritionHudConfig               _config;
-    private readonly Action<SuggestRequestPacket>     _sendSuggest;
+    private readonly NutritionHudConfig _config;
+    private readonly Action             _onSuggestRequest;
 
     private float _grain, _veg, _protein, _dairy;
     private bool  _pulseGrain, _pulseVeg, _pulseProtein, _pulseDairy;
@@ -31,14 +29,14 @@ public class NutritionHud : HudElement
     private double  _suggestionAge;
     private const double SuggestionFadeSeconds = 30.0;
 
-    private List<FoodEntryDto> _history = [];
-    private bool               _showHistory;
+    private IReadOnlyList<FoodEntry> _history = [];
+    private bool                     _showHistory;
 
     public NutritionHud(ICoreClientAPI api, NutritionHudConfig config,
-        Action<SuggestRequestPacket> sendSuggest) : base(api)
+        Action onSuggestRequest) : base(api)
     {
-        _config      = config;
-        _sendSuggest = sendSuggest;
+        _config           = config;
+        _onSuggestRequest = onSuggestRequest;
     }
 
     public override string ToggleKeyCombinationCode => null!;
@@ -61,7 +59,7 @@ public class NutritionHud : HudElement
         if (IsOpened()) Recompose();
     }
 
-    public void SetHistory(List<FoodEntryDto> entries)
+    public void SetHistory(IReadOnlyList<FoodEntry> entries)
     {
         _history = entries;
         if (_showHistory && IsOpened()) Recompose();
@@ -73,12 +71,6 @@ public class NutritionHud : HudElement
         if (IsOpened()) Recompose();
     }
 
-    public void ApplyConfigSync(ConfigSyncPacket p)
-    {
-        _config.Threshold1 = p.Threshold1;
-        _config.Threshold2 = p.Threshold2;
-    }
-
     public void Refresh(float dtSeconds)
     {
         if (!_config.HudVisible) return;
@@ -86,14 +78,15 @@ public class NutritionHud : HudElement
         _suggestionAge += dtSeconds;
         _pulseToggle    = !_pulseToggle;
 
-        var beh = capi.World.Player.Entity.GetBehavior<EntityBehaviorHunger>();
-        if (beh == null) return;
+        var hunger = capi.World.Player?.Entity?.WatchedAttributes.GetTreeAttribute("hunger");
+        if (hunger == null) return;
 
-        float max = beh.MaxSaturation > 0 ? beh.MaxSaturation : 1500f;
-        _grain   = beh.GrainLevel     / max * 100f;
-        _veg     = beh.VegetableLevel / max * 100f;
-        _protein = beh.ProteinLevel   / max * 100f;
-        _dairy   = beh.DairyLevel     / max * 100f;
+        float max = hunger.GetFloat("maxsaturation", 1500f);
+        if (max <= 0) max = 1500f;
+        _grain   = hunger.GetFloat("grainLevel")     / max * 100f;
+        _veg     = hunger.GetFloat("vegetableLevel") / max * 100f;
+        _protein = hunger.GetFloat("proteinLevel")   / max * 100f;
+        _dairy   = hunger.GetFloat("dairyLevel")     / max * 100f;
 
         _pulseGrain   = _grain   < _config.Threshold1;
         _pulseVeg     = _veg     < _config.Threshold1;
@@ -121,7 +114,7 @@ public class NutritionHud : HudElement
             {
                 capi.ShowChatMessage($"[NutritionPlanner] {nutrient} critical ({pct:F0}%). Consider eating.");
                 _alertState[nutrient] = (true, capi.World.Calendar.ElapsedSeconds);
-                _sendSuggest(new SuggestRequestPacket());
+                _onSuggestRequest();
                 return;
             }
         }
@@ -141,10 +134,10 @@ public class NutritionHud : HudElement
             var barProtein = composer.GetStatbar("bar-protein");
             var barDairy   = composer.GetStatbar("bar-dairy");
 
-            barGrain  ?.SetValue(_grain   / 100f);
-            barVeg    ?.SetValue(_veg     / 100f);
-            barProtein?.SetValue(_protein / 100f);
-            barDairy  ?.SetValue(_dairy   / 100f);
+            barGrain  ?.SetValue(_grain);
+            barVeg    ?.SetValue(_veg);
+            barProtein?.SetValue(_protein);
+            barDairy  ?.SetValue(_dairy);
 
             composer.GetDynamicText("pct-grain")  ?.SetNewText($"{_grain:F0}%");
             composer.GetDynamicText("pct-veg")    ?.SetNewText($"{_veg:F0}%");
@@ -163,14 +156,16 @@ public class NutritionHud : HudElement
     {
         double pad    = GuiStyle.ElementToDialogPadding;
         double titleH = GuiStyle.TitleBarHeight;
-        double rowH   = 22;
-        double labelW = 52;
-        double barW   = 120;
-        double pctW   = 36;
+        double rowH   = 26;
+        double labelW = 58;
+        double barW   = 150;
+        double pctW   = 40;
         double innerW = labelW + 4 + barW + 4 + pctW;
         double totalH = titleH + pad
             + 4 * rowH
-            + rowH
+            + 8                // spacer before button/suggestion
+            + rowH             // suggest button row
+            + rowH * 2         // suggestion text (two lines)
             + (_showHistory ? _history.Count * rowH + rowH : 0)
             + pad;
 
@@ -191,10 +186,15 @@ public class NutritionHud : HudElement
         AddBarRow(ref y, "Protein", _protein, "bar-protein", "pct-protein", _pulseProtein && _pulseToggle ? ColorAlert : ColorProtein);
         AddBarRow(ref y, "Dairy",   _dairy,   "bar-dairy",   "pct-dairy",   _pulseDairy   && _pulseToggle ? ColorAlert : ColorDairy);
 
-        var suggText  = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
-        var suggBounds = ElementBounds.Fixed(pad, y, innerW, rowH);
-        SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(11f), suggBounds, "suggestion");
+        y += 8;
+        var btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
+        SingleComposer.AddSmallButton("Suggest", () => { _onSuggestRequest(); return true; }, btnBounds, EnumButtonStyle.Small, "btn-suggest");
         y += rowH;
+
+        var suggText   = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
+        var suggBounds = ElementBounds.Fixed(pad, y, innerW, rowH * 2);
+        SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(11f), suggBounds, "suggestion");
+        y += rowH * 2;
 
         if (_showHistory)
         {
@@ -218,10 +218,10 @@ public class NutritionHud : HudElement
         string barKey, string pctKey, double[] color)
     {
         double pad    = GuiStyle.ElementToDialogPadding;
-        double rowH   = 22;
-        double labelW = 52;
-        double barW   = 120;
-        double pctW   = 36;
+        double rowH   = 26;
+        double labelW = 58;
+        double barW   = 150;
+        double pctW   = 40;
 
         var lblBounds = ElementBounds.Fixed(pad,                          y + 4, labelW, rowH - 4);
         var barBounds = ElementBounds.Fixed(pad + labelW + 4,             y + 6, barW,   rowH - 12);
@@ -232,7 +232,7 @@ public class NutritionHud : HudElement
             .AddStatbar(barBounds, color, barKey)
             .AddDynamicText($"{value:F0}%", CairoFont.WhiteSmallText(), pctBounds, pctKey);
 
-        SingleComposer.GetStatbar(barKey)?.SetValue(value / 100f);
+        SingleComposer.GetStatbar(barKey)?.SetValue(value);
         y += rowH;
     }
 

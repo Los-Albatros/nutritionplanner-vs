@@ -3,11 +3,11 @@
     "name": "NutritionPlanner",
     "modid": "nutritionplanner",
     "version": "0.1.0",
-    "description": "Per-player HUD showing the 4 nutrition bars with progressive alerts and AI-powered meal suggestions.",
+    "description": "Client-side HUD showing the 4 nutrition bars with progressive alerts and AI-powered meal suggestions.",
     "authors": ["Los Albatros"],
-    "side": "Universal",
+    "side": "Client",
     "requiredOnClient": true,
-    "requiredOnServer": true,
+    "requiredOnServer": false,
     "dependencies": {
         "game": "1.19.0"
     },

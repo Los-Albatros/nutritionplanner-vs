@@ -4,22 +4,16 @@ using Vintagestory.API.Client;
 
 namespace nutritionPlannerVintageStoryMod.Client;
 
-/// <summary>
-/// ConfigLib integration for NutritionPlanner settings screen.
-/// Allows players to adjust nutrition thresholds via the ConfigLib mod GUI.
-/// </summary>
 public static class ConfigLibIntegration
 {
-    // Local editable state (mirrors the last config snapshot).
     private static float _threshold1 = 30f;
     private static float _threshold2 = 15f;
     private static int   _cooldown   = 300;
-    private static string _lastHash = "";
+    private static string _lastHash  = "";
 
     public static void InvalidateCache() => _lastHash = "";
 
-    public static void Register(ICoreClientAPI api, NutritionHudConfig config,
-        IClientNetworkChannel channel)
+    public static void Register(ICoreClientAPI api, NutritionHudConfig config)
     {
         var modSys = api.ModLoader.GetModSystem<ConfigLibModSystem>();
         if (modSys == null) return;
@@ -31,7 +25,7 @@ public static class ConfigLibIntegration
                 Sync(config);
                 Draw(id, buttons.Save, config, api);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 api.Logger.Error($"[NutritionPlanner] ConfigLib draw error: {ex.Message}");
             }
@@ -49,8 +43,7 @@ public static class ConfigLibIntegration
         _cooldown   = config.ChatCooldownSeconds;
     }
 
-    private static void Draw(string id, bool save, NutritionHudConfig config,
-        ICoreClientAPI api)
+    private static void Draw(string id, bool save, NutritionHudConfig config, ICoreClientAPI api)
     {
         ImGui.TextDisabled("NutritionPlanner settings");
         ImGui.SetNextItemWidth(200f);

@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace nutritionPlannerVintageStoryMod.Server;
+namespace nutritionPlannerVintageStoryMod.Client;
 
 public record FoodEntry(
     string ItemCode,
@@ -40,7 +40,7 @@ public class FoodHistoryStore
             var entries = JsonSerializer.Deserialize<List<FoodEntry>>(data) ?? [];
             foreach (var e in entries) store.Add(e);
         }
-        catch (System.Text.Json.JsonException) { /* corrupted data → empty store */ }
+        catch (JsonException) { }
         return store;
     }
 }

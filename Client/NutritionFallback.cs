@@ -1,4 +1,4 @@
-namespace nutritionPlannerVintageStoryMod.Server;
+namespace nutritionPlannerVintageStoryMod.Client;
 
 public record NutrientValues(float Grain, float Veg, float Protein, float Dairy, float Max)
 {
