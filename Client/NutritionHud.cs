@@ -271,9 +271,10 @@ public class NutritionHud : HudElement
 
         _suggestionRelY = y;
         if (_suggestionAge >= SuggestionFadeSeconds) _suggestedStack = null;
+        const double leftPad  = 5.0;
         var iconOffset = _suggestedStack != null ? 38.0 : 0.0;
         var suggText   = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
-        var suggBounds = ElementBounds.Fixed(pad + iconOffset, y, innerW - iconOffset, suggH);
+        var suggBounds = ElementBounds.Fixed(pad + leftPad + iconOffset, y, innerW - leftPad - iconOffset, suggH);
         SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(15f), suggBounds, "suggestion");
         y += suggH;
 
