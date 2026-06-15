@@ -166,16 +166,17 @@ public class NutritionHud : HudElement
 
         double pad    = GuiStyle.ElementToDialogPadding;
         double titleH = GuiStyle.TitleBarHeight;
-        double rowH   = 26;
-        double labelW = 58;
-        double barW   = 150;
-        double pctW   = 40;
+        double rowH   = 22;
+        double labelW = 52;
+        double barW   = 130;
+        double pctW   = 36;
         double innerW = labelW + 4 + barW + 4 + pctW;
+        double suggH  = rowH * 2 + 4;
         double totalH = titleH + pad
             + 5 * rowH
-            + 8                // spacer before button/suggestion
-            + rowH             // suggest button row
-            + rowH * 2         // suggestion text (two lines)
+            + 8
+            + rowH
+            + suggH
             + (_showHistory ? _history.Count * rowH + rowH : 0)
             + pad;
 
@@ -190,12 +191,19 @@ public class NutritionHud : HudElement
             .AddDialogTitleBar("Nutrition", () => Toggle())
             .BeginChildElements(bgBounds);
 
+        // Sort by % ascending (most urgent first); tie-break: VS game order Fruit→Veg→Grain→Protein→Dairy
+        var bars = new (string label, float val, string barKey, string pctKey, double[] color, int order)[]
+        {
+            ("Fruit",   _fruit,   "bar-fruit",   "pct-fruit",   _pulseFruit   && _pulseToggle ? ColorAlert : ColorFruit,   0),
+            ("Veg",     _veg,     "bar-veg",     "pct-veg",     _pulseVeg     && _pulseToggle ? ColorAlert : ColorVeg,     1),
+            ("Grain",   _grain,   "bar-grain",   "pct-grain",   _pulseGrain   && _pulseToggle ? ColorAlert : ColorGrain,   2),
+            ("Protein", _protein, "bar-protein", "pct-protein", _pulseProtein && _pulseToggle ? ColorAlert : ColorProtein, 3),
+            ("Dairy",   _dairy,   "bar-dairy",   "pct-dairy",   _pulseDairy   && _pulseToggle ? ColorAlert : ColorDairy,   4),
+        };
+
         double y = titleH + pad;
-        AddBarRow(ref y, "Grain",   _grain,   "bar-grain",   "pct-grain",   _pulseGrain   && _pulseToggle ? ColorAlert : ColorGrain);
-        AddBarRow(ref y, "Veg",     _veg,     "bar-veg",     "pct-veg",     _pulseVeg     && _pulseToggle ? ColorAlert : ColorVeg);
-        AddBarRow(ref y, "Protein", _protein, "bar-protein", "pct-protein", _pulseProtein && _pulseToggle ? ColorAlert : ColorProtein);
-        AddBarRow(ref y, "Dairy",   _dairy,   "bar-dairy",   "pct-dairy",   _pulseDairy   && _pulseToggle ? ColorAlert : ColorDairy);
-        AddBarRow(ref y, "Fruit",   _fruit,   "bar-fruit",   "pct-fruit",   _pulseFruit   && _pulseToggle ? ColorAlert : ColorFruit);
+        foreach (var b in bars.OrderBy(b => b.val).ThenBy(b => b.order))
+            AddBarRow(ref y, b.label, b.val, b.barKey, b.pctKey, b.color);
 
         y += 8;
         var btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
@@ -203,9 +211,9 @@ public class NutritionHud : HudElement
         y += rowH;
 
         var suggText   = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
-        var suggBounds = ElementBounds.Fixed(pad, y, innerW, rowH * 2);
-        SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(13f), suggBounds, "suggestion");
-        y += rowH * 2;
+        var suggBounds = ElementBounds.Fixed(pad, y, innerW, suggH);
+        SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(15f), suggBounds, "suggestion");
+        y += suggH;
 
         if (_showHistory)
         {
@@ -229,10 +237,10 @@ public class NutritionHud : HudElement
         string barKey, string pctKey, double[] color)
     {
         double pad    = GuiStyle.ElementToDialogPadding;
-        double rowH   = 26;
-        double labelW = 58;
-        double barW   = 150;
-        double pctW   = 40;
+        double rowH   = 22;
+        double labelW = 52;
+        double barW   = 130;
+        double pctW   = 36;
 
         var lblBounds = ElementBounds.Fixed(pad,                          y + 4, labelW, rowH - 4);
         var barBounds = ElementBounds.Fixed(pad + labelW + 4,             y + 6, barW,   rowH - 12);
