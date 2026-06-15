@@ -6,10 +6,11 @@ namespace nutritionPlannerVintageStoryMod.Client;
 
 public static class ConfigLibIntegration
 {
-    private static float _threshold1 = 30f;
-    private static float _threshold2 = 15f;
-    private static int   _cooldown   = 300;
-    private static string _lastHash  = "";
+    private static float _threshold1  = 30f;
+    private static float _threshold2  = 15f;
+    private static int   _cooldown    = 300;
+    private static int   _scanRadius  = 64;
+    private static string _lastHash   = "";
 
     public static void InvalidateCache() => _lastHash = "";
 
@@ -34,13 +35,14 @@ public static class ConfigLibIntegration
 
     private static void Sync(NutritionHudConfig config)
     {
-        string hash = $"{config.Threshold1}|{config.Threshold2}|{config.ChatCooldownSeconds}";
+        string hash = $"{config.Threshold1}|{config.Threshold2}|{config.ChatCooldownSeconds}|{config.ScanRadiusBlocks}";
         if (hash == _lastHash) return;
         _lastHash = hash;
 
         _threshold1 = config.Threshold1;
         _threshold2 = config.Threshold2;
         _cooldown   = config.ChatCooldownSeconds;
+        _scanRadius = config.ScanRadiusBlocks;
     }
 
     private static void Draw(string id, bool save, NutritionHudConfig config, ICoreClientAPI api)
@@ -58,12 +60,15 @@ public static class ConfigLibIntegration
         ImGui.SliderFloat($"Critical threshold % (chat alert)##{id}t2", ref _threshold2, 1f, 50f);
         ImGui.SetNextItemWidth(200f);
         ImGui.SliderInt($"Alert cooldown (seconds)##{id}cd", ref _cooldown, 30, 600);
+        ImGui.SetNextItemWidth(200f);
+        ImGui.SliderInt($"Nearby container scan radius (blocks)##{id}sr", ref _scanRadius, 0, 200);
 
         if (save)
         {
             config.Threshold1          = _threshold1;
             config.Threshold2          = _threshold2;
             config.ChatCooldownSeconds = _cooldown;
+            config.ScanRadiusBlocks    = _scanRadius;
             config.Save(api);
             _lastHash = "";
         }

@@ -1,5 +1,6 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.GameContent;
 
 namespace nutritionPlannerVintageStoryMod.Client;
 
@@ -94,15 +95,70 @@ public class NutritionPlannerClientSystem : ModSystem
 
     private void OnSuggestRequested()
     {
+        // Priority 1: player inventory
         var inv = BuildInventoryFoods();
         var raw = NutritionFallback.Suggest(_prev, inv);
-        if (raw == null) { _hud?.SetSuggestion("All nutrition bars look balanced."); return; }
 
-        // raw: "game:pear-ripe (+Veg)" — translate item code, strip domain
-        var sep   = raw.IndexOf(" (+", StringComparison.Ordinal);
-        var code  = sep >= 0 ? raw[..sep] : raw;
-        var rest  = sep >= 0 ? raw[sep..] : "";
-        _hud?.SetSuggestion(TranslateName(code) + rest);
+        // Priority 2: nearby containers within configured radius
+        if (raw == null && (_config?.ScanRadiusBlocks ?? 0) > 0)
+        {
+            var nearby = ScanNearbyContainers();
+            raw = NutritionFallback.Suggest(_prev, nearby);
+        }
+
+        if (raw == null) { _hud?.SetSuggestion("No food found in inventory or nearby.", null); return; }
+
+        var sep  = raw.IndexOf(" (+", StringComparison.Ordinal);
+        var code = sep >= 0 ? raw[..sep] : raw;
+        var rest = sep >= 0 ? raw[sep..] : "";
+        _hud?.SetSuggestion(TranslateName(code) + rest, code);
+    }
+
+    private List<InventoryFood> ScanNearbyContainers()
+    {
+        var result = new List<InventoryFood>();
+        if (_capi?.World.Player?.Entity == null || _config == null) return result;
+
+        var center = _capi.World.Player.Entity.Pos.AsBlockPos;
+        int radius = _config.ScanRadiusBlocks;
+        int cr     = (radius >> 5) + 1;
+        int cx0    = center.X >> 5, cy0 = center.Y >> 5, cz0 = center.Z >> 5;
+
+        for (int cx = cx0 - cr; cx <= cx0 + cr; cx++)
+        for (int cy = cy0 - cr; cy <= cy0 + cr; cy++)
+        for (int cz = cz0 - cr; cz <= cz0 + cr; cz++)
+        {
+            var chunk = _capi.World.BlockAccessor.GetChunk(cx, cy, cz);
+            if (chunk?.BlockEntities == null) continue;
+
+            foreach (var (bpos, be) in chunk.BlockEntities)
+            {
+                if (Math.Abs(bpos.X - center.X) > radius ||
+                    Math.Abs(bpos.Y - center.Y) > radius ||
+                    Math.Abs(bpos.Z - center.Z) > radius) continue;
+
+                if (be is not BlockEntityContainer container) continue;
+
+                foreach (var slot in container.Inventory)
+                {
+                    var props = slot.Itemstack?.Collectible?.NutritionProps;
+                    if (props == null) continue;
+                    var cat = props.FoodCategory switch
+                    {
+                        EnumFoodCategory.Grain     => "Grain",
+                        EnumFoodCategory.Vegetable => "Veg",
+                        EnumFoodCategory.Protein   => "Protein",
+                        EnumFoodCategory.Dairy     => "Dairy",
+                        EnumFoodCategory.Fruit     => "Fruit",
+                        _                          => ""
+                    };
+                    if (!string.IsNullOrEmpty(cat))
+                        result.Add(new InventoryFood(
+                            slot.Itemstack!.Collectible.Code.ToString(), cat));
+                }
+            }
+        }
+        return result;
     }
 
     private string TranslateName(string itemCode)

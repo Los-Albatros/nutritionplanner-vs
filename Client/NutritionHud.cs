@@ -1,4 +1,7 @@
 using Vintagestory.API.Client;
+using Vintagestory.API.Common;
+using Vintagestory.API.MathTools;
+using Vintagestory.GameContent;
 
 namespace nutritionPlannerVintageStoryMod.Client;
 
@@ -27,8 +30,10 @@ public class NutritionHud : HudElement
         ["Fruit"]   = (false, -9999),
     };
 
-    private string? _suggestion;
-    private double  _suggestionAge;
+    private string?    _suggestion;
+    private double     _suggestionAge;
+    private ItemStack? _suggestedStack;
+    private double     _suggestionRelY;
     private const double SuggestionFadeSeconds = 30.0;
 
     private IReadOnlyList<FoodEntry> _history = [];
@@ -54,11 +59,32 @@ public class NutritionHud : HudElement
         _config.Save(capi);
     }
 
-    public void SetSuggestion(string text)
+    public void SetSuggestion(string text, string? itemCode = null)
     {
-        _suggestion    = text;
-        _suggestionAge = 0;
+        _suggestion     = text;
+        _suggestionAge  = 0;
+        _suggestedStack = MakeStack(itemCode);
         if (IsOpened()) Recompose();
+    }
+
+    private ItemStack? MakeStack(string? code)
+    {
+        if (code == null) return null;
+        var loc  = new AssetLocation(code);
+        var item = capi.World.GetItem(loc);
+        if (item  != null) return new ItemStack(item);
+        var block = capi.World.GetBlock(loc);
+        if (block != null) return new ItemStack(block, 1);
+        return null;
+    }
+
+    public override void OnRenderGUI(float dt)
+    {
+        base.OnRenderGUI(dt);
+        if (_suggestedStack == null || _suggestionAge >= SuggestionFadeSeconds || SingleComposer == null) return;
+        double absX = SingleComposer.Bounds.absX + GuiElement.scaled(GuiStyle.ElementToDialogPadding);
+        double absY = SingleComposer.Bounds.absY + GuiElement.scaled(_suggestionRelY + 8);
+        capi.Render.RenderItemstackToGui(new DummySlot(_suggestedStack), absX, absY, 100, 32f, ColorUtil.WhiteArgb);
     }
 
     public void SetHistory(IReadOnlyList<FoodEntry> entries)
@@ -210,8 +236,10 @@ public class NutritionHud : HudElement
         SingleComposer.AddSmallButton("Suggest", () => { _onSuggestRequest(); return true; }, btnBounds, EnumButtonStyle.Small, "btn-suggest");
         y += rowH;
 
+        _suggestionRelY = y;
+        var iconOffset = _suggestedStack != null ? 38.0 : 0.0;
         var suggText   = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
-        var suggBounds = ElementBounds.Fixed(pad, y, innerW, suggH);
+        var suggBounds = ElementBounds.Fixed(pad + iconOffset, y, innerW - iconOffset, suggH);
         SingleComposer.AddDynamicText(suggText, CairoFont.WhiteSmallText().WithFontSize(15f), suggBounds, "suggestion");
         y += suggH;
 

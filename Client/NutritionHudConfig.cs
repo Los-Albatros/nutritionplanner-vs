@@ -13,6 +13,7 @@ public class NutritionHudConfig
     public float Threshold1          { get; set; } = 30f;
     public float Threshold2          { get; set; } = 15f;
     public int   ChatCooldownSeconds { get; set; } = 300;
+    public int   ScanRadiusBlocks    { get; set; } = 64;
 
     private const string FileName = "nutritionplanner-client.json";
 
