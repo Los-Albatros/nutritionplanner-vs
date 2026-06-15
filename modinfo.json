@@ -2,7 +2,7 @@
     "type": "code",
     "name": "NutritionPlanner",
     "modid": "nutritionplanner",
-    "version": "0.1.3",
+    "version": "0.1.1",
     "description": "Client-side HUD showing the 4 nutrition bars with progressive alerts and AI-powered meal suggestions.",
     "authors": ["Los Albatros"],
     "side": "Client",
