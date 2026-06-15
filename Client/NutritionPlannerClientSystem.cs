@@ -232,9 +232,12 @@ public class NutritionPlannerClientSystem : ModSystem
         if (_capi?.World.Player == null) return 0;
         int count = 0;
         foreach (var inv in _capi.World.Player.InventoryManager.Inventories.Values)
+        {
+            if (inv is not InventoryBasePlayer) continue;
             foreach (var slot in inv)
                 if (slot.Itemstack?.Collectible?.Code?.ToString() == itemCode)
                     count += slot.Itemstack.StackSize;
+        }
         return count;
     }
 
@@ -273,6 +276,7 @@ public class NutritionPlannerClientSystem : ModSystem
 
         foreach (var inv in _capi.World.Player.InventoryManager.Inventories.Values)
         {
+            if (inv is not InventoryBasePlayer) continue;
             foreach (var slot in inv)
             {
                 var props = slot.Itemstack?.Collectible?.NutritionProps;
