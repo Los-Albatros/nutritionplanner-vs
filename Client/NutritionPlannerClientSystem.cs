@@ -95,23 +95,38 @@ public class NutritionPlannerClientSystem : ModSystem
 
     private void OnSuggestRequested()
     {
-        // Priority 1: player inventory
-        var inv = BuildInventoryFoods();
-        var raw = NutritionFallback.Suggest(_prev, inv);
+        var mostNeeded = _prev.OrderedByNeed().FirstOrDefault() ?? "Grain";
+        var inv        = BuildInventoryFoods();
 
-        // Priority 2: nearby containers within configured radius
-        if (raw == null && (_config?.ScanRadiusBlocks ?? 0) > 0)
+        // 1. Player inventory — exact category match
+        var match = inv.FirstOrDefault(f => string.Equals(f.NutrientCategory, mostNeeded, StringComparison.OrdinalIgnoreCase));
+        if (match != null)
         {
-            var nearby = ScanNearbyContainers();
-            raw = NutritionFallback.Suggest(_prev, nearby);
+            _hud?.SetSuggestion($"{TranslateName(match.ItemCode)} (+{match.NutrientCategory})", match.ItemCode);
+            return;
         }
 
-        if (raw == null) { _hud?.SetSuggestion("No food found in inventory or nearby.", null); return; }
+        // 2. Nearby containers — exact category match
+        if ((_config?.ScanRadiusBlocks ?? 0) > 0)
+        {
+            var nearby      = ScanNearbyContainers();
+            var nearbyMatch = nearby.FirstOrDefault(f => string.Equals(f.NutrientCategory, mostNeeded, StringComparison.OrdinalIgnoreCase));
+            if (nearbyMatch != null)
+            {
+                _hud?.SetSuggestion($"{TranslateName(nearbyMatch.ItemCode)} (+{nearbyMatch.NutrientCategory}) — nearby", nearbyMatch.ItemCode);
+                return;
+            }
+        }
 
-        var sep  = raw.IndexOf(" (+", StringComparison.Ordinal);
-        var code = sep >= 0 ? raw[..sep] : raw;
-        var rest = sep >= 0 ? raw[sep..] : "";
-        _hud?.SetSuggestion(TranslateName(code) + rest, code);
+        // 3. Cross-category fallback from inventory + missing note
+        var fallback = inv.FirstOrDefault();
+        if (fallback != null)
+        {
+            _hud?.SetSuggestion($"{TranslateName(fallback.ItemCode)} (+{fallback.NutrientCategory}) — {mostNeeded} missing!", fallback.ItemCode);
+            return;
+        }
+
+        _hud?.SetSuggestion($"{mostNeeded} needed — no food found nearby.", null);
     }
 
     private List<InventoryFood> ScanNearbyContainers()
