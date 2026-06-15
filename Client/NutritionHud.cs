@@ -134,12 +134,10 @@ public class NutritionHud : HudElement
 
         CheckAllThresholds();
 
-        bool hasCooldown = _suggestCooldownEnd > 0 && Environment.TickCount64 < _suggestCooldownEnd;
         if (_suggestCooldownEnd > 0 && Environment.TickCount64 >= _suggestCooldownEnd)
             _suggestCooldownEnd = -1;
 
         if (!IsOpened()) { _pulseToggle = false; Recompose(); TryOpen(); }
-        else if (hasCooldown) Recompose();
         else UpdateBars();
     }
 
@@ -263,8 +261,7 @@ public class NutritionHud : HudElement
             AddBarRow(ref y, b.label, b.val, b.rawVal, _max, b.barKey, b.pctKey, b.color);
 
         y += 8;
-        double remaining = _suggestCooldownEnd > 0 ? Math.Max(0, (_suggestCooldownEnd - Environment.TickCount64) / 1000.0) : 0;
-        string btnLabel  = remaining > 0 ? $"Wait {remaining:F0}s" : "Suggest";
+        string btnLabel = "Suggest";
         var    btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
         SingleComposer.AddSmallButton(btnLabel, OnSuggestClick, btnBounds, EnumButtonStyle.Small, "btn-suggest");
         y += rowH;
