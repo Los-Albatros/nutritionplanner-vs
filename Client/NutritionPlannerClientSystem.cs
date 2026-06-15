@@ -103,7 +103,7 @@ public class NutritionPlannerClientSystem : ModSystem
         if (match != null)
         {
             int qty = CountInInventory(match.ItemCode);
-            _hud?.SetSuggestion(FormatSuggestion(match.ItemCode, match.NutrientCategory, qty: qty), match.ItemCode);
+            _hud?.SetSuggestion(FormatSuggestion(match.ItemCode, match.NutrientCategory, qty: qty, source: "in bag"), match.ItemCode);
             return;
         }
 

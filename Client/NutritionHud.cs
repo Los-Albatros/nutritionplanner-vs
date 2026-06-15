@@ -21,9 +21,9 @@ public class NutritionHud : HudElement
     private bool  _pulseGrain, _pulseVeg, _pulseProtein, _pulseDairy, _pulseFruit;
     private bool  _pulseToggle;
 
-    private float  _max                = 1500f;
-    private double _suggestCooldownEnd = -1;
-    private const double SuggestCooldownSec = 5.0;
+    private float _max               = 1500f;
+    private long  _suggestCooldownEnd = -1;   // Environment.TickCount64 (ms), -1 = no cooldown
+    private const long SuggestCooldownMs = 5000L;
 
     private readonly Dictionary<string, (bool belowT2, double lastMessageTime)> _alertState = new()
     {
@@ -90,7 +90,7 @@ public class NutritionHud : HudElement
         if (_renderSlot == null || _suggestionAge >= SuggestionFadeSeconds || SingleComposer == null) return;
         double absX = SingleComposer.Bounds.absX + GuiElement.scaled(GuiStyle.ElementToDialogPadding);
         double absY = SingleComposer.Bounds.absY + GuiElement.scaled(_suggestionRelY + 8);
-        capi.Render.RenderItemstackToGui(_renderSlot, absX, absY, 100, 32f, ColorUtil.WhiteArgb);
+        capi.Render.RenderItemstackToGui(_renderSlot, absX, absY, 100, 20f, ColorUtil.WhiteArgb);
     }
 
     public void SetHistory(IReadOnlyList<FoodEntry> entries)
@@ -132,8 +132,8 @@ public class NutritionHud : HudElement
 
         CheckAllThresholds();
 
-        bool hasCooldown = _suggestCooldownEnd > 0;
-        if (_suggestCooldownEnd > 0 && capi.World.Calendar.ElapsedSeconds >= _suggestCooldownEnd)
+        bool hasCooldown = _suggestCooldownEnd > 0 && Environment.TickCount64 < _suggestCooldownEnd;
+        if (_suggestCooldownEnd > 0 && Environment.TickCount64 >= _suggestCooldownEnd)
             _suggestCooldownEnd = -1;
 
         if (!IsOpened()) { _pulseToggle = false; Recompose(); TryOpen(); }
@@ -177,8 +177,8 @@ public class NutritionHud : HudElement
 
     private bool OnSuggestClick()
     {
-        if (capi.World.Calendar.ElapsedSeconds < _suggestCooldownEnd) return true;
-        _suggestCooldownEnd = capi.World.Calendar.ElapsedSeconds + SuggestCooldownSec;
+        if (Environment.TickCount64 < _suggestCooldownEnd) return true;
+        _suggestCooldownEnd = Environment.TickCount64 + SuggestCooldownMs;
         _onSuggestRequest();
         return true;
     }
@@ -261,7 +261,7 @@ public class NutritionHud : HudElement
             AddBarRow(ref y, b.label, b.val, b.rawVal, _max, b.barKey, b.pctKey, b.color);
 
         y += 8;
-        double remaining = _suggestCooldownEnd > 0 ? Math.Max(0, _suggestCooldownEnd - capi.World.Calendar.ElapsedSeconds) : 0;
+        double remaining = _suggestCooldownEnd > 0 ? Math.Max(0, (_suggestCooldownEnd - Environment.TickCount64) / 1000.0) : 0;
         string btnLabel  = remaining > 0 ? $"Wait {remaining:F0}s" : "Suggest";
         var    btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
         SingleComposer.AddSmallButton(btnLabel, OnSuggestClick, btnBounds, EnumButtonStyle.Small, "btn-suggest");
