@@ -21,6 +21,10 @@ public class NutritionHud : HudElement
     private bool  _pulseGrain, _pulseVeg, _pulseProtein, _pulseDairy, _pulseFruit;
     private bool  _pulseToggle;
 
+    private float  _max                = 1500f;
+    private double _suggestCooldownEnd = -1;
+    private const double SuggestCooldownSec = 5.0;
+
     private readonly Dictionary<string, (bool belowT2, double lastMessageTime)> _alertState = new()
     {
         ["Grain"]   = (false, -9999),
@@ -33,6 +37,7 @@ public class NutritionHud : HudElement
     private string?    _suggestion;
     private double     _suggestionAge;
     private ItemStack? _suggestedStack;
+    private DummySlot? _renderSlot;
     private double     _suggestionRelY;
     private const double SuggestionFadeSeconds = 30.0;
 
@@ -64,6 +69,7 @@ public class NutritionHud : HudElement
         _suggestion     = text;
         _suggestionAge  = 0;
         _suggestedStack = MakeStack(itemCode);
+        _renderSlot     = _suggestedStack != null ? new DummySlot(_suggestedStack) : null;
         if (IsOpened()) Recompose();
     }
 
@@ -81,10 +87,10 @@ public class NutritionHud : HudElement
     public override void OnRenderGUI(float dt)
     {
         base.OnRenderGUI(dt);
-        if (_suggestedStack == null || _suggestionAge >= SuggestionFadeSeconds || SingleComposer == null) return;
+        if (_renderSlot == null || _suggestionAge >= SuggestionFadeSeconds || SingleComposer == null) return;
         double absX = SingleComposer.Bounds.absX + GuiElement.scaled(GuiStyle.ElementToDialogPadding);
         double absY = SingleComposer.Bounds.absY + GuiElement.scaled(_suggestionRelY + 8);
-        capi.Render.RenderItemstackToGui(new DummySlot(_suggestedStack), absX, absY, 100, 32f, ColorUtil.WhiteArgb);
+        capi.Render.RenderItemstackToGui(_renderSlot, absX, absY, 100, 32f, ColorUtil.WhiteArgb);
     }
 
     public void SetHistory(IReadOnlyList<FoodEntry> entries)
@@ -111,6 +117,7 @@ public class NutritionHud : HudElement
 
         float max = hunger.GetFloat("maxsaturation", 1500f);
         if (max <= 0) max = 1500f;
+        _max     = max;
         _grain   = hunger.GetFloat("grainLevel")     / max * 100f;
         _veg     = hunger.GetFloat("vegetableLevel") / max * 100f;
         _protein = hunger.GetFloat("proteinLevel")   / max * 100f;
@@ -123,34 +130,57 @@ public class NutritionHud : HudElement
         _pulseDairy   = _dairy   < _config.Threshold1;
         _pulseFruit   = _fruit   < _config.Threshold1;
 
-        CheckThreshold2("Grain",   _grain);
-        CheckThreshold2("Veg",     _veg);
-        CheckThreshold2("Protein", _protein);
-        CheckThreshold2("Dairy",   _dairy);
-        CheckThreshold2("Fruit",   _fruit);
+        CheckAllThresholds();
+
+        bool hasCooldown = _suggestCooldownEnd > 0;
+        if (_suggestCooldownEnd > 0 && capi.World.Calendar.ElapsedSeconds >= _suggestCooldownEnd)
+            _suggestCooldownEnd = -1;
 
         if (!IsOpened()) { _pulseToggle = false; Recompose(); TryOpen(); }
+        else if (hasCooldown) Recompose();
         else UpdateBars();
     }
 
-    private void CheckThreshold2(string nutrient, float pct)
+    private void CheckAllThresholds()
     {
-        var state     = _alertState[nutrient];
-        bool nowBelow = pct < _config.Threshold2;
+        double now     = capi.World.Calendar.ElapsedSeconds;
+        var    newCrit = new List<string>();
 
-        if (nowBelow && !state.belowT2)
+        foreach (var (name, pct) in new[]
         {
-            double elapsed = capi.World.Calendar.ElapsedSeconds - state.lastMessageTime;
-            if (elapsed >= _config.ChatCooldownSeconds)
-            {
-                capi.ShowChatMessage($"[NutritionPlanner] {nutrient} critical ({pct:F0}%). Consider eating.");
-                _alertState[nutrient] = (true, capi.World.Calendar.ElapsedSeconds);
-                _onSuggestRequest();
-                return;
-            }
+            ("Grain",   _grain),
+            ("Veg",     _veg),
+            ("Protein", _protein),
+            ("Dairy",   _dairy),
+            ("Fruit",   _fruit)
+        })
+        {
+            var  state    = _alertState[name];
+            bool nowBelow = pct < _config.Threshold2;
+
+            if (nowBelow && !state.belowT2 && now - state.lastMessageTime >= _config.ChatCooldownSeconds)
+                newCrit.Add($"{name} ({pct:F0}%)");
+
+            _alertState[name] = (nowBelow, state.lastMessageTime);
         }
 
-        _alertState[nutrient] = (nowBelow, state.lastMessageTime);
+        if (newCrit.Count == 0) return;
+
+        capi.ShowChatMessage($"[NutritionPlanner] {string.Join(" + ", newCrit)} critical! Consider eating.");
+        foreach (var part in newCrit)
+        {
+            var name = part[..part.IndexOf(' ')];
+            _alertState[name] = (true, now);
+        }
+        _onSuggestRequest();
+    }
+
+    private bool OnSuggestClick()
+    {
+        if (capi.World.Calendar.ElapsedSeconds < _suggestCooldownEnd) return true;
+        _suggestCooldownEnd = capi.World.Calendar.ElapsedSeconds + SuggestCooldownSec;
+        _onSuggestRequest();
+        return true;
     }
 
     private void UpdateBars()
@@ -217,26 +247,28 @@ public class NutritionHud : HudElement
             .AddDialogTitleBar("Nutrition", () => Toggle())
             .BeginChildElements(bgBounds);
 
-        // Sort by % ascending (most urgent first); tie-break: VS game order Fruit→Veg→Grain→Protein→Dairy
-        var bars = new (string label, float val, string barKey, string pctKey, double[] color, int order)[]
+        var bars = new (string label, float val, float rawVal, string barKey, string pctKey, double[] color, int order)[]
         {
-            ("Fruit",   _fruit,   "bar-fruit",   "pct-fruit",   _pulseFruit   && _pulseToggle ? ColorAlert : ColorFruit,   0),
-            ("Veg",     _veg,     "bar-veg",     "pct-veg",     _pulseVeg     && _pulseToggle ? ColorAlert : ColorVeg,     1),
-            ("Grain",   _grain,   "bar-grain",   "pct-grain",   _pulseGrain   && _pulseToggle ? ColorAlert : ColorGrain,   2),
-            ("Protein", _protein, "bar-protein", "pct-protein", _pulseProtein && _pulseToggle ? ColorAlert : ColorProtein, 3),
-            ("Dairy",   _dairy,   "bar-dairy",   "pct-dairy",   _pulseDairy   && _pulseToggle ? ColorAlert : ColorDairy,   4),
+            ("Fruit",   _fruit,   _fruit   / 100f * _max, "bar-fruit",   "pct-fruit",   _pulseFruit   && _pulseToggle ? ColorAlert : ColorFruit,   0),
+            ("Veg",     _veg,     _veg     / 100f * _max, "bar-veg",     "pct-veg",     _pulseVeg     && _pulseToggle ? ColorAlert : ColorVeg,     1),
+            ("Grain",   _grain,   _grain   / 100f * _max, "bar-grain",   "pct-grain",   _pulseGrain   && _pulseToggle ? ColorAlert : ColorGrain,   2),
+            ("Protein", _protein, _protein / 100f * _max, "bar-protein", "pct-protein", _pulseProtein && _pulseToggle ? ColorAlert : ColorProtein, 3),
+            ("Dairy",   _dairy,   _dairy   / 100f * _max, "bar-dairy",   "pct-dairy",   _pulseDairy   && _pulseToggle ? ColorAlert : ColorDairy,   4),
         };
 
         double y = titleH + pad;
         foreach (var b in bars.OrderBy(b => b.val).ThenBy(b => b.order))
-            AddBarRow(ref y, b.label, b.val, b.barKey, b.pctKey, b.color);
+            AddBarRow(ref y, b.label, b.val, b.rawVal, _max, b.barKey, b.pctKey, b.color);
 
         y += 8;
-        var btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
-        SingleComposer.AddSmallButton("Suggest", () => { _onSuggestRequest(); return true; }, btnBounds, EnumButtonStyle.Small, "btn-suggest");
+        double remaining = _suggestCooldownEnd > 0 ? Math.Max(0, _suggestCooldownEnd - capi.World.Calendar.ElapsedSeconds) : 0;
+        string btnLabel  = remaining > 0 ? $"Wait {remaining:F0}s" : "Suggest";
+        var    btnBounds = ElementBounds.Fixed(pad + innerW - 80, y + 2, 80, rowH - 4);
+        SingleComposer.AddSmallButton(btnLabel, OnSuggestClick, btnBounds, EnumButtonStyle.Small, "btn-suggest");
         y += rowH;
 
         _suggestionRelY = y;
+        if (_suggestionAge >= SuggestionFadeSeconds) _suggestedStack = null;
         var iconOffset = _suggestedStack != null ? 38.0 : 0.0;
         var suggText   = (_suggestion != null && _suggestionAge < SuggestionFadeSeconds) ? $"→ {_suggestion}" : "";
         var suggBounds = ElementBounds.Fixed(pad + iconOffset, y, innerW - iconOffset, suggH);
@@ -261,7 +293,7 @@ public class NutritionHud : HudElement
         SingleComposer.EndChildElements().Compose();
     }
 
-    private void AddBarRow(ref double y, string label, float value,
+    private void AddBarRow(ref double y, string label, float value, float rawValue, float max,
         string barKey, string pctKey, double[] color)
     {
         double pad    = GuiStyle.ElementToDialogPadding;
@@ -270,14 +302,16 @@ public class NutritionHud : HudElement
         double barW   = 130;
         double pctW   = 36;
 
-        var lblBounds = ElementBounds.Fixed(pad,                          y + 4, labelW, rowH - 4);
-        var barBounds = ElementBounds.Fixed(pad + labelW + 4,             y + 6, barW,   rowH - 12);
-        var pctBounds = ElementBounds.Fixed(pad + labelW + 4 + barW + 4, y + 4, pctW,   rowH - 4);
+        var lblBounds   = ElementBounds.Fixed(pad,                          y + 4, labelW,                       rowH - 4);
+        var barBounds   = ElementBounds.Fixed(pad + labelW + 4,             y + 6, barW,                         rowH - 12);
+        var pctBounds   = ElementBounds.Fixed(pad + labelW + 4 + barW + 4, y + 4, pctW,                         rowH - 4);
+        var hoverBounds = ElementBounds.Fixed(pad,                          y,     labelW + 4 + barW + 4 + pctW, rowH);
 
         SingleComposer
             .AddStaticText(label, CairoFont.WhiteSmallText(), lblBounds)
             .AddStatbar(barBounds, color, barKey)
-            .AddDynamicText($"{value:F0}%", CairoFont.WhiteSmallText(), pctBounds, pctKey);
+            .AddDynamicText($"{value:F0}%", CairoFont.WhiteSmallText(), pctBounds, pctKey)
+            .AddHoverText($"{value:F0}%  ({rawValue:F0} / {max:F0})", CairoFont.WhiteSmallText(), 160, hoverBounds, $"hint-{barKey}");
 
         SingleComposer.GetStatbar(barKey)?.SetValue(value);
         y += rowH;

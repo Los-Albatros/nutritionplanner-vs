@@ -1,5 +1,6 @@
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
+using Vintagestory.API.MathTools;
 using Vintagestory.GameContent;
 
 namespace nutritionPlannerVintageStoryMod.Client;
@@ -96,42 +97,60 @@ public class NutritionPlannerClientSystem : ModSystem
     private void OnSuggestRequested()
     {
         var mostNeeded = _prev.OrderedByNeed().FirstOrDefault() ?? "Grain";
-        var inv        = BuildInventoryFoods();
+        var inv        = PrioritizeByHistory(BuildInventoryFoods(), mostNeeded);
 
-        // 1. Player inventory — exact category match
         var match = inv.FirstOrDefault(f => string.Equals(f.NutrientCategory, mostNeeded, StringComparison.OrdinalIgnoreCase));
         if (match != null)
         {
-            _hud?.SetSuggestion($"{TranslateName(match.ItemCode)} (+{match.NutrientCategory})", match.ItemCode);
+            int qty = CountInInventory(match.ItemCode);
+            _hud?.SetSuggestion(FormatSuggestion(match.ItemCode, match.NutrientCategory, qty: qty), match.ItemCode);
             return;
         }
 
-        // 2. Nearby containers — exact category match
         if ((_config?.ScanRadiusBlocks ?? 0) > 0)
         {
-            var nearby      = ScanNearbyContainers();
-            var nearbyMatch = nearby.FirstOrDefault(f => string.Equals(f.NutrientCategory, mostNeeded, StringComparison.OrdinalIgnoreCase));
-            if (nearbyMatch != null)
+            var nearby  = ScanNearbyContainers();
+            var scores  = _history.Entries.Count > 0
+                ? _history.Entries
+                    .GroupBy(e => e.ItemCode)
+                    .ToDictionary(g => g.Key, g => g.Sum(e => mostNeeded switch
+                    {
+                        "Grain"   => e.DeltaGrain,
+                        "Veg"     => e.DeltaVeg,
+                        "Protein" => e.DeltaProtein,
+                        "Dairy"   => e.DeltaDairy,
+                        "Fruit"   => e.DeltaFruit,
+                        _         => 0f
+                    }))
+                : new Dictionary<string, float>();
+
+            var best = nearby
+                .Where(t => string.Equals(t.Food.NutrientCategory, mostNeeded, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(t => scores.TryGetValue(t.Food.ItemCode, out var s) ? s : 0f)
+                .FirstOrDefault();
+
+            if (best != default)
             {
-                _hud?.SetSuggestion($"{TranslateName(nearbyMatch.ItemCode)} (+{nearbyMatch.NutrientCategory}) — nearby", nearbyMatch.ItemCode);
+                var dir = DirectionHint(_capi!.World.Player.Entity.Pos.AsBlockPos, best.Pos);
+                _hud?.SetSuggestion(FormatSuggestion(best.Food.ItemCode, best.Food.NutrientCategory, source: dir), best.Food.ItemCode);
                 return;
             }
         }
 
-        // 3. Cross-category fallback from inventory + missing note
         var fallback = inv.FirstOrDefault();
         if (fallback != null)
         {
-            _hud?.SetSuggestion($"{TranslateName(fallback.ItemCode)} (+{fallback.NutrientCategory}) — {mostNeeded} missing!", fallback.ItemCode);
+            int qty = CountInInventory(fallback.ItemCode);
+            _hud?.SetSuggestion(FormatSuggestion(fallback.ItemCode, fallback.NutrientCategory, qty: qty, missingCat: mostNeeded), fallback.ItemCode);
             return;
         }
 
         _hud?.SetSuggestion($"{mostNeeded} needed — no food found nearby.", null);
     }
 
-    private List<InventoryFood> ScanNearbyContainers()
+    private List<(InventoryFood Food, BlockPos Pos)> ScanNearbyContainers()
     {
-        var result = new List<InventoryFood>();
+        var result = new List<(InventoryFood, BlockPos)>();
         if (_capi?.World.Player?.Entity == null || _config == null) return result;
 
         var center = _capi.World.Player.Entity.Pos.AsBlockPos;
@@ -168,8 +187,7 @@ public class NutritionPlannerClientSystem : ModSystem
                         _                          => ""
                     };
                     if (!string.IsNullOrEmpty(cat))
-                        result.Add(new InventoryFood(
-                            slot.Itemstack!.Collectible.Code.ToString(), cat));
+                        result.Add((new InventoryFood(slot.Itemstack!.Collectible.Code.ToString(), cat), bpos));
                 }
             }
         }
@@ -184,6 +202,66 @@ public class NutritionPlannerClientSystem : ModSystem
         var block = _capi!.World.GetBlock(loc);
         if (block != null) return block.GetHeldItemName(new ItemStack(block, 1));
         return loc.Path.Replace("-", " ");
+    }
+
+    private static string DirectionHint(BlockPos from, BlockPos to)
+    {
+        int    dx   = to.X - from.X;
+        int    dz   = to.Z - from.Z;
+        double dist = Math.Sqrt(dx * dx + dz * dz);
+        string dir;
+        if      (Math.Abs(dx) > Math.Abs(dz) * 2) dir = dx > 0 ? "E" : "W";
+        else if (Math.Abs(dz) > Math.Abs(dx) * 2) dir = dz > 0 ? "S" : "N";
+        else                                        dir = (dz > 0 ? "S" : "N") + (dx > 0 ? "E" : "W");
+        return $"{dist:F0}m {dir}";
+    }
+
+    private float GetSatiety(string itemCode)
+    {
+        var loc   = new AssetLocation(itemCode);
+        var item  = _capi!.World.GetItem(loc);
+        if (item  != null) return item.NutritionProps?.Satiety ?? 0f;
+        var block = _capi!.World.GetBlock(loc);
+        return block?.NutritionProps?.Satiety ?? 0f;
+    }
+
+    private int CountInInventory(string itemCode)
+    {
+        if (_capi?.World.Player == null) return 0;
+        int count = 0;
+        foreach (var inv in _capi.World.Player.InventoryManager.Inventories.Values)
+            foreach (var slot in inv)
+                if (slot.Itemstack?.Collectible?.Code?.ToString() == itemCode)
+                    count += slot.Itemstack.StackSize;
+        return count;
+    }
+
+    private List<InventoryFood> PrioritizeByHistory(List<InventoryFood> foods, string targetCategory)
+    {
+        if (_history.Entries.Count == 0) return foods;
+        var scores = _history.Entries
+            .GroupBy(e => e.ItemCode)
+            .ToDictionary(g => g.Key, g => g.Sum(e => targetCategory switch
+            {
+                "Grain"   => e.DeltaGrain,
+                "Veg"     => e.DeltaVeg,
+                "Protein" => e.DeltaProtein,
+                "Dairy"   => e.DeltaDairy,
+                "Fruit"   => e.DeltaFruit,
+                _         => 0f
+            }));
+        return foods.OrderByDescending(f => scores.TryGetValue(f.ItemCode, out var s) ? s : 0f).ToList();
+    }
+
+    private string FormatSuggestion(string itemCode, string category, int qty = 0, string? source = null, string? missingCat = null)
+    {
+        var   name    = TranslateName(itemCode);
+        float sat     = GetSatiety(itemCode);
+        var   gain    = sat > 0 ? $" +{sat:F0}" : "";
+        var   count   = qty > 1 ? $"×{qty} " : "";
+        var   src     = source     != null ? $" — {source}"           : "";
+        var   missing = missingCat != null ? $" — {missingCat} missing!" : "";
+        return $"{count}{name} ({category}{gain}){src}{missing}";
     }
 
     private List<InventoryFood> BuildInventoryFoods()
