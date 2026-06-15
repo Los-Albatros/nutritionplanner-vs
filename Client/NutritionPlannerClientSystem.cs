@@ -165,11 +165,13 @@ public class NutritionPlannerClientSystem : ModSystem
             var chunk = _capi.World.BlockAccessor.GetChunk(cx, cy, cz);
             if (chunk?.BlockEntities == null) continue;
 
-            foreach (var (bpos, be) in chunk.BlockEntities)
+            foreach (var be in chunk.BlockEntities.Values)
             {
-                if (Math.Abs(bpos.X - center.X) > radius ||
-                    Math.Abs(bpos.Y - center.Y) > radius ||
-                    Math.Abs(bpos.Z - center.Z) > radius) continue;
+                var bePos = be.Pos;
+                if (bePos == null) continue;
+                if (Math.Abs(bePos.X - center.X) > radius ||
+                    Math.Abs(bePos.Y - center.Y) > radius ||
+                    Math.Abs(bePos.Z - center.Z) > radius) continue;
 
                 if (be is not BlockEntityContainer container) continue;
 
@@ -187,7 +189,7 @@ public class NutritionPlannerClientSystem : ModSystem
                         _                          => ""
                     };
                     if (!string.IsNullOrEmpty(cat))
-                        result.Add((new InventoryFood(slot.Itemstack!.Collectible.Code.ToString(), cat), bpos));
+                        result.Add((new InventoryFood(slot.Itemstack!.Collectible.Code.ToString(), cat), bePos));
                 }
             }
         }

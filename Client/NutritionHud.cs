@@ -88,8 +88,10 @@ public class NutritionHud : HudElement
     {
         base.OnRenderGUI(dt);
         if (_renderSlot == null || _suggestionAge >= SuggestionFadeSeconds || SingleComposer == null) return;
-        double absX = SingleComposer.Bounds.absX + GuiElement.scaled(GuiStyle.ElementToDialogPadding);
-        double absY = SingleComposer.Bounds.absY + GuiElement.scaled(_suggestionRelY + 8);
+        var sugg = SingleComposer.GetDynamicText("suggestion");
+        if (sugg == null) return;
+        double absX = sugg.Bounds.absX - GuiElement.scaled(36);
+        double absY = sugg.Bounds.absY + GuiElement.scaled(1);
         capi.Render.RenderItemstackToGui(_renderSlot, absX, absY, 100, 20f, ColorUtil.WhiteArgb);
     }
 
